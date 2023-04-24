@@ -25,37 +25,42 @@ import Combine
 @MainActor class TestingReportViewModel: ObservableObject {
     @Published var appCodeCoverage: AppCodeCoverage
     var cancellables = Set<AnyCancellable>()
+    @Published var appnames: [String] = []
     
     init(appCodeCoverage: AppCodeCoverage = AppCodeCoverage()) {
         self.appCodeCoverage = appCodeCoverage
-        
-        for _ in 1...10 {
-            let codeCoverage = CodeCoverage()
-            codeCoverage._id = ObjectId.generate()
-            codeCoverage.appName = "innovation041023.app"
-            codeCoverage.uuid = UUID().uuidString
-            let year = Int.random(in: 2021...2023) // Generate a random year between 2021 and 2023
-            let month = Int.random(in: 1...12) // Generate a random month between 1 and 12
-            let day = Int.random(in: 1...31) // Generate a random day between 1 and 31
-            codeCoverage.timestamp = createDate(year: year, month: month, day: day)
-            
-            let file1 = File()
-            file1.name = "StockDetailView.swift"
-            file1.uuid = UUID().uuidString
-            file1.linesCovered = Int.random(in: 40...60) // Generate a random value between 40 and 60 for linesCovered
-            file1.totalLines = 423
-            
-            let file2 = File()
-            file2.name = "AddStockView.swift"
-            file2.uuid = UUID().uuidString
-            file2.linesCovered = Int.random(in: 25...35) // Generate a random value between 25 and 35 for linesCovered
-            file2.totalLines = 123
-            
-            codeCoverage.filenames.append(objectsIn: [file1, file2])
-            codeCoverage.linesCovered = file1.linesCovered + file2.linesCovered
-            
-            appCodeCoverage.appCodeCoverage[codeCoverage.appName, default: []].append(codeCoverage)
-        }
+        appCodeCoverage.$appCodeCoverage.sink { [weak self] value in
+            Task { @MainActor in
+                self?.appnames.append(value.keys.first ?? "NA")
+            }
+        }.store(in: &cancellables)
+//        for _ in 1...10 {
+//            let codeCoverage = CodeCoverage()
+//            codeCoverage._id = ObjectId.generate()
+//            codeCoverage.appName = "innovation041023.app"
+//            codeCoverage.uuid = UUID().uuidString
+//            let year = Int.random(in: 2021...2023) // Generate a random year between 2021 and 2023
+//            let month = Int.random(in: 1...12) // Generate a random month between 1 and 12
+//            let day = Int.random(in: 1...31) // Generate a random day between 1 and 31
+//            codeCoverage.timestamp = createDate(year: year, month: month, day: day)
+//
+//            let file1 = File()
+//            file1.name = "StockDetailView.swift"
+//            file1.uuid = UUID().uuidString
+//            file1.linesCovered = Int.random(in: 40...60) // Generate a random value between 40 and 60 for linesCovered
+//            file1.totalLines = 423
+//
+//            let file2 = File()
+//            file2.name = "AddStockView.swift"
+//            file2.uuid = UUID().uuidString
+//            file2.linesCovered = Int.random(in: 25...35) // Generate a random value between 25 and 35 for linesCovered
+//            file2.totalLines = 123
+//
+//            codeCoverage.filenames.append(objectsIn: [file1, file2])
+//            codeCoverage.linesCovered = file1.linesCovered + file2.linesCovered
+//
+//            appCodeCoverage.appCodeCoverage[codeCoverage.appName, default: []].append(codeCoverage)
+//        }
     }
     func insertCodeCoverage(appName: String, coverageReport: CodeCoverage) {
         self.appCodeCoverage.appCodeCoverage[appName, default: []].append(coverageReport)
@@ -146,80 +151,78 @@ struct ContentView: View {
             }
             .onAppear {
                 print("fetch some data")
-//                app.login(credentials: anonymousCredentials) { (result) in
-//                    switch result {
-//                    case .failure(let error):
-//                        print("Login failed: \(error.localizedDescription)")
-//                    case .success(let user):
-//                        print("Successfully logged in as user \(user)")
-//
-//                        let client = app.currentUser!.mongoClient("mongodb-atlas")
-//
-//                        let database = client.database(named: "testing_database")
-//
-//                        let collection = database.collection(withName: "code_coverage")
-//
-//                        let queryFilter: Document = ["appName": "innovation041023.app"]
-//
-//                        collection.find(filter: queryFilter) { result in
-//                            switch result {
-//                            case .failure(let error):
-//                                print("Call to MongoDB failed: \(error.localizedDescription)")
-//                                return
-//                            case .success(let documents):
-//                                print("Results: ")
-//                                var codeCoverages: [CodeCoverage] = []
-//
-//                                for document in documents {
-//                                    // Access document fields using their keys
-//                                    let appName = document["appName"]??.stringValue ?? ""
-//                                    let id: ObjectId? = {
-//                                        if let idValue = document["_id"] as? AnyBSON, case let .objectId(objectId) = idValue {
-//                                            return objectId
-//                                        } else {
-//                                            return nil
-//                                        }
-//                                    }()
-//
-//                                    let uuid = document["uuid"]??.stringValue ?? ""
-//                                    let filenames = (document["filenames"] as? AnyBSON)?.arrayValue
-//                                    let linesCovered = Int(document["linesCovered"]??.int32Value ?? 0)
-//                                    let totalLines = Int(document["totalLines"]??.int32Value ?? 0)
-//                                    let timestamp: Date? = {
-//                                        if let datetime = document["timestamp"] as? AnyBSON, case let .datetime(date) = datetime {
-//                                            return date
-//                                        } else {
-//                                            return nil
-//                                        }
-//                                    }()
-//
-//                                    // Create instances of CodeCoverage class with document field values
-//                                    let codeCoverage = CodeCoverage()
-//                                    codeCoverage.appName = appName
-//                                    codeCoverage._id = id ?? ObjectId()
-//                                    codeCoverage.uuid = uuid
-//                                    codeCoverage.linesCovered = linesCovered
-//                                    codeCoverage.totalLines = totalLines
-//                                    codeCoverage.timestamp = timestamp
-//
-//                                    // Iterate through filenames array and create instances of File class
-//                                    for filenameDocument in filenames ?? [] {
-//                                        let file = File()
-//                                        file.name = filenameDocument?.documentValue?["name"]??.stringValue ?? ""
-//                                        file.uuid = filenameDocument?.documentValue?["uuid"]??.stringValue ?? ""
-//                                        file.linesCovered = Int(filenameDocument?.documentValue?["linesCovered"]??.int32Value ?? 0)
-//                                        file.totalLines = Int(filenameDocument?.documentValue?["totalLines"]??.int32Value ?? 0)
-//                                        // Append File instances to filenames array
-//                                        codeCoverage.filenames.append(file)
-//                                    }
-//
-//                                    self.testingReportViewModel.insertCodeCoverage(appName: appName, coverageReport: codeCoverage)
-//                                }
-//                                print(testingReportViewModel.appCodeCoverage.appCodeCoverage.keys)
-//                            }
-//                        }
-//                    }
-//                }
+                app.login(credentials: anonymousCredentials) { (result) in
+                    switch result {
+                    case .failure(let error):
+                        print("Login failed: \(error.localizedDescription)")
+                    case .success(let user):
+                        print("Successfully logged in as user \(user)")
+
+                        let client = app.currentUser!.mongoClient("mongodb-atlas")
+
+                        let database = client.database(named: "testing_database")
+
+                        let collection = database.collection(withName: "code_coverage")
+
+                        let queryFilter: Document = ["appName": "innovation041023.app"]
+
+                        collection.find(filter: queryFilter) { result in
+                            switch result {
+                            case .failure(let error):
+                                print("Call to MongoDB failed: \(error.localizedDescription)")
+                                return
+                            case .success(let documents):
+                                print("Results: ")
+                                for document in documents {
+                                    // Access document fields using their keys
+                                    let appName = document["appName"]??.stringValue ?? ""
+                                    let id: ObjectId? = {
+                                        if let idValue = document["_id"] as? AnyBSON, case let .objectId(objectId) = idValue {
+                                            return objectId
+                                        } else {
+                                            return nil
+                                        }
+                                    }()
+
+                                    let uuid = document["uuid"]??.stringValue ?? ""
+                                    let filenames = (document["filenames"] as? AnyBSON)?.arrayValue
+                                    let linesCovered = Int(document["linesCovered"]??.int32Value ?? 0)
+                                    let totalLines = Int(document["totalLines"]??.int32Value ?? 0)
+                                    let timestamp: Date? = {
+                                        if let datetime = document["timestamp"] as? AnyBSON, case let .datetime(date) = datetime {
+                                            return date
+                                        } else {
+                                            return nil
+                                        }
+                                    }()
+
+                                    // Create instances of CodeCoverage class with document field values
+                                    let codeCoverage = CodeCoverage()
+                                    codeCoverage.appName = appName
+                                    codeCoverage._id = id ?? ObjectId()
+                                    codeCoverage.uuid = uuid
+                                    codeCoverage.linesCovered = linesCovered
+                                    codeCoverage.totalLines = totalLines
+                                    codeCoverage.timestamp = timestamp
+
+                                    // Iterate through filenames array and create instances of File class
+                                    for filenameDocument in filenames ?? [] {
+                                        let file = File()
+                                        file.name = filenameDocument?.documentValue?["name"]??.stringValue ?? ""
+                                        file.uuid = filenameDocument?.documentValue?["uuid"]??.stringValue ?? ""
+                                        file.linesCovered = Int(filenameDocument?.documentValue?["linesCovered"]??.int32Value ?? 0)
+                                        file.totalLines = Int(filenameDocument?.documentValue?["totalLines"]??.int32Value ?? 0)
+                                        // Append File instances to filenames array
+                                        codeCoverage.filenames.append(file)
+                                    }
+
+                                    self.testingReportViewModel.insertCodeCoverage(appName: appName, coverageReport: codeCoverage)
+                                }
+                                print(testingReportViewModel.appCodeCoverage.appCodeCoverage)
+                            }
+                        }
+                    }
+                }
             }
             .padding()
         }
