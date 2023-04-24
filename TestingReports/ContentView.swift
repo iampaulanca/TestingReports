@@ -9,6 +9,7 @@ import SwiftUI
 import Realm
 import RealmSwift
 import Charts
+import Combine
 
 let app = App(id: "testingreports-wmsrv")
 let anonymousCredentials = Credentials.anonymous
@@ -21,11 +22,11 @@ struct PlotXY: Identifiable, Hashable, Equatable {
     let y: Double
     let id = UUID()
 }
-import Combine
+
 @MainActor class TestingReportViewModel: ObservableObject {
     @Published var appCodeCoverage: AppCodeCoverage
-    var cancellables = Set<AnyCancellable>()
     @Published var appnames: [String] = []
+    var cancellables = Set<AnyCancellable>()
     
     init(appCodeCoverage: AppCodeCoverage = AppCodeCoverage()) {
         self.appCodeCoverage = appCodeCoverage
@@ -129,6 +130,7 @@ struct CodeCoverageReportDetailView: View {
 struct ContentView: View {
     @StateObject var testingReportViewModel = TestingReportViewModel()
     @State var navigationPath = NavigationPath()
+    @State var initialLoad = false
     var body: some View {
         NavigationStack(path: $navigationPath) {
             VStack {
@@ -151,78 +153,82 @@ struct ContentView: View {
             }
             .onAppear {
                 print("fetch some data")
-                app.login(credentials: anonymousCredentials) { (result) in
-                    switch result {
-                    case .failure(let error):
-                        print("Login failed: \(error.localizedDescription)")
-                    case .success(let user):
-                        print("Successfully logged in as user \(user)")
+                if !initialLoad {
+                    app.login(credentials: anonymousCredentials) { (result) in
+                        switch result {
+                        case .failure(let error):
+                            print("Login failed: \(error.localizedDescription)")
+                        case .success(let user):
+                            print("Successfully logged in as user \(user)")
 
-                        let client = app.currentUser!.mongoClient("mongodb-atlas")
+                            let client = app.currentUser!.mongoClient("mongodb-atlas")
 
-                        let database = client.database(named: "testing_database")
+                            let database = client.database(named: "testing_database")
 
-                        let collection = database.collection(withName: "code_coverage")
+                            let collection = database.collection(withName: "code_coverage")
 
-                        let queryFilter: Document = ["appName": "innovation041023.app"]
+                            let queryFilter: Document = ["appName": "innovation041023.app"]
 
-                        collection.find(filter: queryFilter) { result in
-                            switch result {
-                            case .failure(let error):
-                                print("Call to MongoDB failed: \(error.localizedDescription)")
-                                return
-                            case .success(let documents):
-                                print("Results: ")
-                                for document in documents {
-                                    // Access document fields using their keys
-                                    let appName = document["appName"]??.stringValue ?? ""
-                                    let id: ObjectId? = {
-                                        if let idValue = document["_id"] as? AnyBSON, case let .objectId(objectId) = idValue {
-                                            return objectId
-                                        } else {
-                                            return nil
+                            collection.find(filter: queryFilter) { result in
+                                switch result {
+                                case .failure(let error):
+                                    print("Call to MongoDB failed: \(error.localizedDescription)")
+                                    return
+                                case .success(let documents):
+                                    print("Results: ")
+                                    for document in documents {
+                                        // Access document fields using their keys
+                                        let appName = document["appName"]??.stringValue ?? ""
+                                        let id: ObjectId? = {
+                                            if let idValue = document["_id"] as? AnyBSON, case let .objectId(objectId) = idValue {
+                                                return objectId
+                                            } else {
+                                                return nil
+                                            }
+                                        }()
+
+                                        let uuid = document["uuid"]??.stringValue ?? ""
+                                        let filenames = (document["filenames"] as? AnyBSON)?.arrayValue
+                                        let linesCovered = Int(document["linesCovered"]??.int32Value ?? 0)
+                                        let totalLines = Int(document["totalLines"]??.int32Value ?? 0)
+                                        let timestamp: Date? = {
+                                            if let datetime = document["timestamp"] as? AnyBSON, case let .datetime(date) = datetime {
+                                                return date
+                                            } else {
+                                                return nil
+                                            }
+                                        }()
+
+                                        // Create instances of CodeCoverage class with document field values
+                                        let codeCoverage = CodeCoverage()
+                                        codeCoverage.appName = appName
+                                        codeCoverage._id = id ?? ObjectId()
+                                        codeCoverage.uuid = uuid
+                                        codeCoverage.linesCovered = linesCovered
+                                        codeCoverage.totalLines = totalLines
+                                        codeCoverage.timestamp = timestamp
+
+                                        // Iterate through filenames array and create instances of File class
+                                        for filenameDocument in filenames ?? [] {
+                                            let file = File()
+                                            file.name = filenameDocument?.documentValue?["name"]??.stringValue ?? ""
+                                            file.uuid = filenameDocument?.documentValue?["uuid"]??.stringValue ?? ""
+                                            file.linesCovered = Int(filenameDocument?.documentValue?["linesCovered"]??.int32Value ?? 0)
+                                            file.totalLines = Int(filenameDocument?.documentValue?["totalLines"]??.int32Value ?? 0)
+                                            // Append File instances to filenames array
+                                            codeCoverage.filenames.append(file)
                                         }
-                                    }()
 
-                                    let uuid = document["uuid"]??.stringValue ?? ""
-                                    let filenames = (document["filenames"] as? AnyBSON)?.arrayValue
-                                    let linesCovered = Int(document["linesCovered"]??.int32Value ?? 0)
-                                    let totalLines = Int(document["totalLines"]??.int32Value ?? 0)
-                                    let timestamp: Date? = {
-                                        if let datetime = document["timestamp"] as? AnyBSON, case let .datetime(date) = datetime {
-                                            return date
-                                        } else {
-                                            return nil
-                                        }
-                                    }()
-
-                                    // Create instances of CodeCoverage class with document field values
-                                    let codeCoverage = CodeCoverage()
-                                    codeCoverage.appName = appName
-                                    codeCoverage._id = id ?? ObjectId()
-                                    codeCoverage.uuid = uuid
-                                    codeCoverage.linesCovered = linesCovered
-                                    codeCoverage.totalLines = totalLines
-                                    codeCoverage.timestamp = timestamp
-
-                                    // Iterate through filenames array and create instances of File class
-                                    for filenameDocument in filenames ?? [] {
-                                        let file = File()
-                                        file.name = filenameDocument?.documentValue?["name"]??.stringValue ?? ""
-                                        file.uuid = filenameDocument?.documentValue?["uuid"]??.stringValue ?? ""
-                                        file.linesCovered = Int(filenameDocument?.documentValue?["linesCovered"]??.int32Value ?? 0)
-                                        file.totalLines = Int(filenameDocument?.documentValue?["totalLines"]??.int32Value ?? 0)
-                                        // Append File instances to filenames array
-                                        codeCoverage.filenames.append(file)
+                                        self.testingReportViewModel.insertCodeCoverage(appName: appName, coverageReport: codeCoverage)
                                     }
-
-                                    self.testingReportViewModel.insertCodeCoverage(appName: appName, coverageReport: codeCoverage)
+                                    print(testingReportViewModel.appCodeCoverage.appCodeCoverage)
                                 }
-                                print(testingReportViewModel.appCodeCoverage.appCodeCoverage)
                             }
+                            initialLoad = true
                         }
                     }
                 }
+                
             }
             .padding()
         }
